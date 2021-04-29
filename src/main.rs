@@ -2,6 +2,10 @@ use rand::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::env::args;
+use std::thread;
+use std::time::Duration;
+use std::io::prelude::*;
+
 
 
 struct Extent {
@@ -25,19 +29,19 @@ impl Extent {
 #[derive(Debug)]
 enum El<T> {
     None,
-    Some(Rc<RefCell<Box<T>>>),
+    Some(Rc<RefCell<T>>),
 }
 
 impl<T> El<T> {
-    fn new_part(data: T) -> Rc<RefCell<Box<T>>> {
-        Rc::new(RefCell::new(Box::new(data)))
+    fn new_part(data: T) -> Rc<RefCell<T>> {
+        Rc::new(RefCell::new(data))
     }
 }
 #[derive(Debug)]
 struct Tree {
     val: f32,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,PartialEq)]
 struct PT {
     x: f32,
     y: f32,
@@ -84,8 +88,8 @@ struct QT {
     capacity: usize,
     subdiv: bool,
     margin: f32,
-    leafs:Vec<Rc<RefCell<Box<QT>>>>,
     bb: BB,
+    leafs:Vec<Rc<RefCell<QT>>>,
     ne: El<QT>,
     nw: El<QT>,
     se: El<QT>,
@@ -103,6 +107,7 @@ impl QT {
             bb: BB::new(c, w, h),
             margin,
             capacity: cap,
+            leafs:vec![],
             subdiv: false,
             ne: El::None,
             nw: El::None,
@@ -120,19 +125,18 @@ impl QT {
                 self.points.push(o);
             } else {
                 self.points.push(o.clone());
-                self.subdivide();
+                let mut temp_leafs = vec![];
+                self.subdivide(&mut temp_leafs);
+                self.leafs = temp_leafs;
                 //println!("after subdiv head {:?}", self.points);
                 //println!("self is subdivided {:?}",self.subdiv);
                 //println!("self is {:#?}",self);
             }
         } else {
             // descend into the structure via children
-            let mut candidates = vec![];
-            QT::return_rc(&self.ne, &mut candidates);
-            QT::return_rc(&self.nw, &mut candidates);
-            QT::return_rc(&self.se, &mut candidates);
-            QT::return_rc(&self.sw, &mut candidates);
-            let mut candidate_option = candidates.pop();
+            let mut i = 0;
+            // iterate over the leafs
+            let mut candidate_option = self.leafs.get(i);
             while let Some(candidate) = candidate_option {
                 //println!("candidate len is {:?}",candidates.len());
                 let mut candidate = candidate.borrow_mut();
@@ -146,28 +150,34 @@ impl QT {
                             // this is the end of this path too
                             // temporarily go above cap so that we can loop over the cap +1 points when redistributing
                             candidate.points.push(o.clone());
-                            candidate.subdivide();
+                            candidate.subdivide(&mut self.leafs);
                         }
                     // else if we are at cap and haven't subdivided
-                    } else {
-                        // lastly, if we've already subdivided must offer up children as add point candidates
-                        QT::return_rc(&candidate.ne, &mut candidates);
-                        QT::return_rc(&candidate.nw, &mut candidates);
-                        QT::return_rc(&candidate.se, &mut candidates);
-                        QT::return_rc(&candidate.sw, &mut candidates);
                     }
                 }
                 // slowly deplete the list of candidates while we add
-                candidate_option = candidates.pop();
+                i+=1;
+                candidate_option = self.get(i);
             }
         }
     }
-    fn subdivide(&mut self) {
+    fn subdivide(&mut self,leafs_vec:&mut Vec<Rc<RefCell<QT>>>) {
         // make the 4 new children to replace the None's
         // pay special attention to the calculation of BB's for each
         self.subdiv = true;
         let points = self.points.clone();
         self.points = vec![];
+        // remove self from the leaf_list
+        let mut i = 0;
+        while i < leafs_vec.len(){
+            let other = leafs_vec[i].borrow();
+            if other.bb.c == self.bb.c {
+                break;
+            }
+            i+=1;
+        }
+        leafs_vec.remove(i);
+
         // subtract w/4 and add h/4 from self.c for the new center,
         // new width is w/2 + 2*margin same for height
         let mut ne = QT::new(
@@ -207,17 +217,25 @@ impl QT {
             se.directAdd(pt.clone());
         }
         // then wrap them in El::Some's and update our self
-        self.ne = El::Some(El::new_part(ne));
-        self.se = El::Some(El::new_part(se));
-        self.nw = El::Some(El::new_part(nw));
-        self.sw = El::Some(El::new_part(sw));
+        let rc_wrap_ne = El::new_part(ne);
+        let rc_wrap_se = El::new_part(se);
+        let rc_wrap_nw = El::new_part(nw);
+        let rc_wrap_sw = El::new_part(sw);
+        leafs_vec.push(rc_wrap_ne.clone());
+        leafs_vec.push(rc_wrap_se.clone());
+        leafs_vec.push(rc_wrap_nw.clone());
+        leafs_vec.push(rc_wrap_sw.clone());
+        self.ne = El::Some(rc_wrap_ne.clone());
+        self.se = El::Some(rc_wrap_ne.clone());
+        self.nw = El::Some(rc_wrap_ne.clone());
+        self.sw = El::Some(rc_wrap_ne.clone());
     }
     fn directAdd(&mut self, o: PT) {
         if self.bb.contains(&o) {
             self.points.push(o.clone());
         }
     }
-    fn return_rc(el: &El<QT>, v: &mut Vec<Rc<RefCell<Box<QT>>>>) {
+    fn return_rc(el: &El<QT>, v: &mut Vec<Rc<RefCell<QT>>>) {
         match el {
             El::Some(contents) => {
                 v.push(Rc::clone(&contents));
@@ -254,8 +272,12 @@ fn main() {
     let head = El::new_part(QT::new(c, w, h, w / 20.0, 1000));
     let head_ref = Rc::clone(&head);
     for (i, pt) in data.iter().enumerate() {
-        println!("point processed {:?} {:?}", pt, i);
+        //println!("point processed {:?} {:?}", pt, i);
         head_ref.borrow_mut().add_point(pt.clone());
     }
     //println!("result {:#?}", head);
+    // halt program and wait for enter to end
+    println!("waiting");
+    let mut s = String::new();
+    std::io::stdin().read_line(&mut s).unwrap();
 }
