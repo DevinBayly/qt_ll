@@ -78,7 +78,7 @@ impl BB {
         }
     }
     fn contains(&self, o: &PT) -> bool {
-        self.t >= o.y && self.b <= o.y && self.l <= o.x && self.b >= o.x
+        self.t >= o.y && self.b <= o.y && self.l <= o.x && self.r >= o.x
     }
 }
 
@@ -114,12 +114,16 @@ impl QT {
         }
     }
     // need the add point algorithm
-    fn addPoint(&mut self, o: PT) {
+    fn add_point(&mut self, o: PT) {
         // these are the children we might add the point to
         // start with head and proceed
         if self.points.len() < self.capacity && self.bb.contains(&o) {
             self.points.push(o);
+        } else if !self.subdiv{
+            self.points.push(o.clone());
+            self.subdivide();
         } else {
+
             // descend into the structure via children
             let mut candidates = vec![];
             QT::return_rc(&self.ne, &mut candidates);
@@ -158,6 +162,7 @@ impl QT {
     fn subdivide(&mut self) {
         // make the 4 new children to replace the None's
         // pay special attention to the calculation of BB's for each 
+        self.subdiv = true;
         let points = self.points.clone();
         self.points = vec![];
         // subtract w/4 and add h/4 from self.c for the new center, 
@@ -248,13 +253,14 @@ fn main() {
         z_ext.comp(pt.y);
     }
     // center should be the mid point which is (max - min)/2 + min
-    let w = (x_ext.max - x_ext.min);
-    let h = (z_ext.max - z_ext.min);
+    let w = x_ext.max - x_ext.min;
+    let h = z_ext.max - z_ext.min;
     let c = PT::new((x_ext.max - x_ext.min)/2.0 + x_ext.min,(z_ext.max - z_ext.min)/2.0 + z_ext.min);
-    let head = El::new_part(QT::new(c,w,h,w/8.0,4));
+    let head = El::new_part(QT::new(c,w,h,w/20.0,4));
+    let head_ref = Rc::clone(&head);
     for pt in data {
-        let mut head = head.borrow_mut();
-        head.addPoint(pt.clone());
+        println!("point processed {:?}",pt);
+        head_ref.borrow_mut().add_point(pt.clone());
     }
     println!("result {:?}", head);
 }
