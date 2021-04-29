@@ -1,12 +1,10 @@
 use rand::prelude::*;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::env::args;
+use std::io::prelude::*;
+use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
-use std::io::prelude::*;
-
-
 
 struct Extent {
     min: f32,
@@ -41,7 +39,7 @@ impl<T> El<T> {
 struct Tree {
     val: f32,
 }
-#[derive(Debug, Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct PT {
     x: f32,
     y: f32,
@@ -89,7 +87,6 @@ struct QT {
     subdiv: bool,
     margin: f32,
     bb: BB,
-    leafs:Vec<Rc<RefCell<QT>>>,
     ne: El<QT>,
     nw: El<QT>,
     se: El<QT>,
@@ -107,7 +104,6 @@ impl QT {
             bb: BB::new(c, w, h),
             margin,
             capacity: cap,
-            leafs:vec![],
             subdiv: false,
             ne: El::None,
             nw: El::None,
@@ -116,68 +112,56 @@ impl QT {
         }
     }
     // need the add point algorithm
-    fn add_point(&mut self, o: PT) {
+    fn add_point(&mut self, o: PT, leafs: &mut Vec<Rc<RefCell<QT>>>) {
         // these are the children we might add the point to
         // start with head and proceed
+        println!("num leafs {:?}",leafs.len());
+        let mut new_leafs = vec![];
         if !self.subdiv {
             if self.points.len() < self.capacity && self.bb.contains(&o) {
                 //println!("beginning {:?}", self.points);
                 self.points.push(o);
             } else {
                 self.points.push(o.clone());
-                let mut temp_leafs = vec![];
-                self.subdivide(&mut temp_leafs);
-                self.leafs = temp_leafs;
+                self.subdivide(&mut new_leafs);
+                *leafs = new_leafs;
                 //println!("after subdiv head {:?}", self.points);
                 //println!("self is subdivided {:?}",self.subdiv);
                 //println!("self is {:#?}",self);
             }
         } else {
-            // descend into the structure via children
-            let mut i = 0;
-            // iterate over the leafs
-            let mut candidate_option = self.leafs.get(i);
-            while let Some(candidate) = candidate_option {
+            // unpack via popping from the leafs, but add them to the new leafs as we go under certain circumstances
+            while let Some(candidate_rc) = leafs.pop() {
                 //println!("candidate len is {:?}",candidates.len());
-                let mut candidate = candidate.borrow_mut();
+                let mut candidate = candidate_rc.borrow_mut();
                 if candidate.bb.contains(&o) {
                     if !candidate.subdiv {
                         // if capacity isn't full and haven't subdivided
                         if candidate.points.len() < candidate.capacity {
                             candidate.points.push(o.clone());
+                            // we should keep this leaf in our listing
+                            new_leafs.push(Rc::clone(&candidate_rc));
                         } else {
                             // this is the complex spot, call on the subdivide for our candidate and spread the existing points between the children
                             // this is the end of this path too
                             // temporarily go above cap so that we can loop over the cap +1 points when redistributing
                             candidate.points.push(o.clone());
-                            candidate.subdivide(&mut self.leafs);
+                            candidate.subdivide(&mut new_leafs);
                         }
-                    // else if we are at cap and haven't subdivided
+                        // else if we are at cap and haven't subdivided
                     }
                 }
                 // slowly deplete the list of candidates while we add
-                i+=1;
-                candidate_option = self.get(i);
             }
+            *leafs = new_leafs;
         }
     }
-    fn subdivide(&mut self,leafs_vec:&mut Vec<Rc<RefCell<QT>>>) {
+    fn subdivide(&mut self, leafs_vec: &mut Vec<Rc<RefCell<QT>>>) {
         // make the 4 new children to replace the None's
         // pay special attention to the calculation of BB's for each
         self.subdiv = true;
         let points = self.points.clone();
         self.points = vec![];
-        // remove self from the leaf_list
-        let mut i = 0;
-        while i < leafs_vec.len(){
-            let other = leafs_vec[i].borrow();
-            if other.bb.c == self.bb.c {
-                break;
-            }
-            i+=1;
-        }
-        leafs_vec.remove(i);
-
         // subtract w/4 and add h/4 from self.c for the new center,
         // new width is w/2 + 2*margin same for height
         let mut ne = QT::new(
@@ -249,7 +233,7 @@ impl QT {
 // still needs initial setup and random point creation as we loop
 fn main() {
     //println!("Hello, world!");
-    let max_number= args().nth(1).unwrap().parse::<usize>().unwrap();
+    let max_number = args().nth(1).unwrap().parse::<usize>().unwrap();
     let mut thread = rand::thread_rng();
     let mut data = vec![];
     for i in 0..max_number {
@@ -269,14 +253,16 @@ fn main() {
         (x_ext.max - x_ext.min) / 2.0 + x_ext.min,
         (z_ext.max - z_ext.min) / 2.0 + z_ext.min,
     );
-    let head = El::new_part(QT::new(c, w, h, w / 20.0, 1000));
+    let head = El::new_part(QT::new(c, w, h, w / 20.0, 100));
     let head_ref = Rc::clone(&head);
+    let mut leafs = vec![];
     for (i, pt) in data.iter().enumerate() {
-        //println!("point processed {:?} {:?}", pt, i);
-        head_ref.borrow_mut().add_point(pt.clone());
+        println!("point processed {:?} {:?}", pt, i);
+        head_ref.borrow_mut().add_point(pt.clone(), &mut leafs);
     }
     //println!("result {:#?}", head);
     // halt program and wait for enter to end
+    println!("qt {:?}",head);
     println!("waiting");
     let mut s = String::new();
     std::io::stdin().read_line(&mut s).unwrap();
