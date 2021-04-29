@@ -118,7 +118,7 @@ impl QT {
         // start with head and proceed
         ////println!("num leafs {:?}",leafs.len());
         let mut new_leafs = vec![];
-        println!("leafs len{}",leafs.len());
+        //println!("leafs len{}",leafs.len());
         if !self.subdiv {
             if self.points.len() < self.capacity && self.bb.contains(&o) {
                 //////println!("beginning {:?}", self.points);
@@ -169,7 +169,7 @@ impl QT {
         }
     }
     fn subdivide(&mut self, leafs_vec: &mut Vec<Rc<RefCell<QT>>>) {
-        println!("subdividing {:?}",self.bb.c);
+        //println!("subdividing {:?}",self.bb.c);
         // make the 4 new children to replace the None's
         // pay special attention to the calculation of BB's for each
         self.subdiv = true;
@@ -249,6 +249,8 @@ impl QT {
 fn main() {
     //////println!("Hello, world!");
     let max_number = args().nth(1).unwrap().parse::<usize>().unwrap();
+    let margin = args().nth(2).unwrap().parse::<f32>().unwrap();
+    let capacity = args().nth(3).unwrap().parse::<usize>().unwrap();
     let mut thread = rand::thread_rng();
     let mut data = vec![];
     for i in 0..max_number {
@@ -268,11 +270,11 @@ fn main() {
         (x_ext.max - x_ext.min) / 2.0 + x_ext.min,
         (z_ext.max - z_ext.min) / 2.0 + z_ext.min,
     );
-    let head = El::new_part(QT::new(c, w, h, w/200.0 , 4));
+    let head = El::new_part(QT::new(c, w, h, margin, capacity));
     let head_ref = Rc::clone(&head);
     let mut leafs = vec![];
     for (i, pt) in data.iter().enumerate() {
-        println!("point processed {:?} {:?}", pt, i);
+        //println!("point processed {:?} {:?}", pt, i);
         head_ref.borrow_mut().add_point(pt.clone(), &mut leafs);
     }
     //println!("head {:?}",head);
