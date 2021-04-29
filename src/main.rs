@@ -1,19 +1,19 @@
 use rand::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::env::args;
+
+
 struct Extent {
-    min:f32,
-    max:f32,
+    min: f32,
+    max: f32,
 }
 
 impl Extent {
-    fn new()->Self {
-        Extent {
-            min:0.0,
-            max:0.0
-        }
+    fn new() -> Self {
+        Extent { min: 0.0, max: 0.0 }
     }
-    fn comp(&mut self,other:f32) {
+    fn comp(&mut self, other: f32) {
         if other < self.min {
             self.min = other;
         } else if other > self.max {
@@ -21,7 +21,6 @@ impl Extent {
         }
     }
 }
-
 
 #[derive(Debug)]
 enum El<T> {
@@ -43,12 +42,9 @@ struct PT {
     x: f32,
     y: f32,
 }
-impl PT{
-    fn new(x:f32,y:f32) -> Self {
-        PT {
-            x,
-            y
-        }
+impl PT {
+    fn new(x: f32, y: f32) -> Self {
+        PT { x, y }
     }
 }
 // bounding box
@@ -87,7 +83,8 @@ struct QT {
     points: Vec<PT>,
     capacity: usize,
     subdiv: bool,
-    margin:f32,
+    margin: f32,
+    leafs:Vec<Rc<RefCell<Box<QT>>>>,
     bb: BB,
     ne: El<QT>,
     nw: El<QT>,
@@ -100,7 +97,7 @@ impl QT {
     // include capacity
     // create rect group
     // support overlap margin idea
-    fn new(c: PT, w: f32, h: f32,margin:f32, cap: usize) -> Self {
+    fn new(c: PT, w: f32, h: f32, margin: f32, cap: usize) -> Self {
         QT {
             points: vec![],
             bb: BB::new(c, w, h),
@@ -117,13 +114,18 @@ impl QT {
     fn add_point(&mut self, o: PT) {
         // these are the children we might add the point to
         // start with head and proceed
-        if self.points.len() < self.capacity && self.bb.contains(&o) {
-            self.points.push(o);
-        } else if !self.subdiv{
-            self.points.push(o.clone());
-            self.subdivide();
+        if !self.subdiv {
+            if self.points.len() < self.capacity && self.bb.contains(&o) {
+                //println!("beginning {:?}", self.points);
+                self.points.push(o);
+            } else {
+                self.points.push(o.clone());
+                self.subdivide();
+                //println!("after subdiv head {:?}", self.points);
+                //println!("self is subdivided {:?}",self.subdiv);
+                //println!("self is {:#?}",self);
+            }
         } else {
-
             // descend into the structure via children
             let mut candidates = vec![];
             QT::return_rc(&self.ne, &mut candidates);
@@ -132,6 +134,7 @@ impl QT {
             QT::return_rc(&self.sw, &mut candidates);
             let mut candidate_option = candidates.pop();
             while let Some(candidate) = candidate_option {
+                //println!("candidate len is {:?}",candidates.len());
                 let mut candidate = candidate.borrow_mut();
                 if candidate.bb.contains(&o) {
                     if !candidate.subdiv {
@@ -145,7 +148,7 @@ impl QT {
                             candidate.points.push(o.clone());
                             candidate.subdivide();
                         }
-                        // else if we are at cap and haven't subdivided
+                    // else if we are at cap and haven't subdivided
                     } else {
                         // lastly, if we've already subdivided must offer up children as add point candidates
                         QT::return_rc(&candidate.ne, &mut candidates);
@@ -161,54 +164,42 @@ impl QT {
     }
     fn subdivide(&mut self) {
         // make the 4 new children to replace the None's
-        // pay special attention to the calculation of BB's for each 
+        // pay special attention to the calculation of BB's for each
         self.subdiv = true;
         let points = self.points.clone();
         self.points = vec![];
-        // subtract w/4 and add h/4 from self.c for the new center, 
+        // subtract w/4 and add h/4 from self.c for the new center,
         // new width is w/2 + 2*margin same for height
         let mut ne = QT::new(
-            PT::new(
-                self.bb.c.x - self.bb.w/4.0,
-                self.bb.c.y + self.bb.h/4.0
-            ),
-            self.bb.w/2.0 +2.0*self.margin,
-            self.bb.h/2.0 +2.0*self.margin,
+            PT::new(self.bb.c.x - self.bb.w / 4.0, self.bb.c.y + self.bb.h / 4.0),
+            self.bb.w / 2.0 + 2.0 * self.margin,
+            self.bb.h / 2.0 + 2.0 * self.margin,
             self.margin,
             self.capacity,
         );
         let mut nw = QT::new(
-            PT::new(
-                self.bb.c.x + self.bb.w/4.0,
-                self.bb.c.y + self.bb.h/4.0
-            ),
-            self.bb.w/2.0 +2.0*self.margin,
-            self.bb.h/2.0 +2.0*self.margin,
+            PT::new(self.bb.c.x + self.bb.w / 4.0, self.bb.c.y + self.bb.h / 4.0),
+            self.bb.w / 2.0 + 2.0 * self.margin,
+            self.bb.h / 2.0 + 2.0 * self.margin,
             self.margin,
             self.capacity,
         );
         let mut sw = QT::new(
-            PT::new(
-                self.bb.c.x + self.bb.w/4.0,
-                self.bb.c.y - self.bb.h/4.0
-            ),
-            self.bb.w/2.0 +2.0*self.margin,
-            self.bb.h/2.0 +2.0*self.margin,
+            PT::new(self.bb.c.x + self.bb.w / 4.0, self.bb.c.y - self.bb.h / 4.0),
+            self.bb.w / 2.0 + 2.0 * self.margin,
+            self.bb.h / 2.0 + 2.0 * self.margin,
             self.margin,
             self.capacity,
         );
         let mut se = QT::new(
-            PT::new(
-                self.bb.c.x - self.bb.w/4.0,
-                self.bb.c.y - self.bb.h/4.0
-            ),
-            self.bb.w/2.0 +2.0*self.margin,
-            self.bb.h/2.0 +2.0*self.margin,
+            PT::new(self.bb.c.x - self.bb.w / 4.0, self.bb.c.y - self.bb.h / 4.0),
+            self.bb.w / 2.0 + 2.0 * self.margin,
+            self.bb.h / 2.0 + 2.0 * self.margin,
             self.margin,
             self.capacity,
         );
         for pt in points {
-            // use direct add on each 
+            // use direct add on each
             // they will succeed or fail depending on their bounds
             ne.directAdd(pt.clone());
             nw.directAdd(pt.clone());
@@ -221,12 +212,12 @@ impl QT {
         self.nw = El::Some(El::new_part(nw));
         self.sw = El::Some(El::new_part(sw));
     }
-    fn directAdd(&mut self,o:PT) {
+    fn directAdd(&mut self, o: PT) {
         if self.bb.contains(&o) {
             self.points.push(o.clone());
         }
     }
-    fn return_rc(el:&El<QT>, v: &mut Vec<Rc<RefCell<Box<QT>>>>) {
+    fn return_rc(el: &El<QT>, v: &mut Vec<Rc<RefCell<Box<QT>>>>) {
         match el {
             El::Some(contents) => {
                 v.push(Rc::clone(&contents));
@@ -239,11 +230,12 @@ impl QT {
 // test out whether this works !!!!
 // still needs initial setup and random point creation as we loop
 fn main() {
-    println!("Hello, world!");
+    //println!("Hello, world!");
+    let max_number= args().nth(1).unwrap().parse::<usize>().unwrap();
     let mut thread = rand::thread_rng();
     let mut data = vec![];
-    for i in 0..8000 {
-        data.push(PT::new(thread.gen::<f32>(),thread.gen::<f32>()));
+    for i in 0..max_number {
+        data.push(PT::new(thread.gen::<f32>(), thread.gen::<f32>()));
     }
     //thread.fill_data(&mut rand_data);
     let mut x_ext = Extent::new();
@@ -255,12 +247,15 @@ fn main() {
     // center should be the mid point which is (max - min)/2 + min
     let w = x_ext.max - x_ext.min;
     let h = z_ext.max - z_ext.min;
-    let c = PT::new((x_ext.max - x_ext.min)/2.0 + x_ext.min,(z_ext.max - z_ext.min)/2.0 + z_ext.min);
-    let head = El::new_part(QT::new(c,w,h,w/20.0,4));
+    let c = PT::new(
+        (x_ext.max - x_ext.min) / 2.0 + x_ext.min,
+        (z_ext.max - z_ext.min) / 2.0 + z_ext.min,
+    );
+    let head = El::new_part(QT::new(c, w, h, w / 20.0, 1000));
     let head_ref = Rc::clone(&head);
-    for (i,pt) in data.iter().enumerate() {
-        println!("point processed {:?} {:?}",pt,i);
+    for (i, pt) in data.iter().enumerate() {
+        println!("point processed {:?} {:?}", pt, i);
         head_ref.borrow_mut().add_point(pt.clone());
     }
-    println!("result {:?}", head);
+    //println!("result {:#?}", head);
 }
