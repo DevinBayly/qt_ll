@@ -242,7 +242,39 @@ impl QT {
             _ => {}
         }
     }
+    fn return_child_refs(&self)-> Vec<Rc<RefCell<QT>>> {
+        let mut child_refs_vec = vec![];
+        Self::return_rc(&self.ne,&mut child_refs_vec);
+        Self::return_rc(&self.nw,&mut child_refs_vec);
+        Self::return_rc(&self.se,&mut child_refs_vec);
+        Self::return_rc(&self.sw,&mut child_refs_vec);
+        child_refs_vec
+    }
+
     // the query algorithm
+    fn query(&mut self,o:PT) -> Vec<PT>{
+        let mut result =vec![];
+        // walk via references through the collection as long as we know the qt contains the point until we reach the leaf holding correct neighbor values
+        let mut child_refs = vec![];
+        child_refs.extend(self.return_child_refs());
+        // loop through
+        while let Some(child_ref_rc) = child_refs.pop() {
+            let child_ref = child_ref_rc.borrow();
+            // check for containment
+            if child_ref.bb.contains(&o) {
+                // if its subdivided
+                if child_ref.subdiv {
+                    // add the child_ref childne to the child_refs vector
+                    child_refs.extend(child_ref.return_child_refs());
+                }else {
+                    result.extend(child_ref.points.clone());
+                }
+            }
+        }
+        result
+        
+
+    }
 }
 // test out whether this works !!!!
 // still needs initial setup and random point creation as we loop
@@ -279,6 +311,7 @@ fn main() {
     }
     //println!("head {:?}",head);
     // iterate over the head and output data to draw the tree
+    println!("{:?}",head.borrow_mut().query(PT::new(0.5,0.5)));
 
 
 
