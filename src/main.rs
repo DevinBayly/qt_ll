@@ -258,8 +258,8 @@ fn main() {
     let c = PT::new((x_ext.max - x_ext.min)/2.0 + x_ext.min,(z_ext.max - z_ext.min)/2.0 + z_ext.min);
     let head = El::new_part(QT::new(c,w,h,w/20.0,4));
     let head_ref = Rc::clone(&head);
-    for pt in data {
-        println!("point processed {:?}",pt);
+    for (i,pt) in data.iter().enumerate() {
+        println!("point processed {:?} {:?}",pt,i);
         head_ref.borrow_mut().add_point(pt.clone());
     }
     println!("result {:?}", head);
