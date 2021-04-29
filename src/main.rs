@@ -1,6 +1,28 @@
+use rand::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-// worry about the extent objects later
+struct Extent {
+    min:f32,
+    max:f32,
+}
+
+impl Extent {
+    fn new()->Self {
+        Extent {
+            min:0.0,
+            max:0.0
+        }
+    }
+    fn comp(&mut self,other:f32) {
+        if other < self.min {
+            self.min = other;
+        } else if other > self.max {
+            self.max = other;
+        }
+    }
+}
+
+
 #[derive(Debug)]
 enum El<T> {
     None,
@@ -46,13 +68,13 @@ struct BB {
 impl BB {
     fn new(c: PT, w: f32, h: f32) -> BB {
         BB {
-            w,
-            h,
-            c,
             t: c.y + h / 2.0,
             b: c.y - h / 2.0,
             l: c.x - w / 2.0,
             r: c.x + w / 2.0,
+            w,
+            h,
+            c,
         }
     }
     fn contains(&self, o: &PT) -> bool {
@@ -100,13 +122,13 @@ impl QT {
         } else {
             // descend into the structure via children
             let mut candidates = vec![];
-            QT::return_rc(self.ne, &mut candidates);
-            QT::return_rc(self.nw, &mut candidates);
-            QT::return_rc(self.se, &mut candidates);
-            QT::return_rc(self.sw, &mut candidates);
+            QT::return_rc(&self.ne, &mut candidates);
+            QT::return_rc(&self.nw, &mut candidates);
+            QT::return_rc(&self.se, &mut candidates);
+            QT::return_rc(&self.sw, &mut candidates);
             let mut candidate_option = candidates.pop();
             while let Some(candidate) = candidate_option {
-                let candidate = candidate.borrow_mut();
+                let mut candidate = candidate.borrow_mut();
                 if candidate.bb.contains(&o) {
                     if !candidate.subdiv {
                         // if capacity isn't full and haven't subdivided
@@ -122,10 +144,10 @@ impl QT {
                         // else if we are at cap and haven't subdivided
                     } else {
                         // lastly, if we've already subdivided must offer up children as add point candidates
-                        QT::return_rc(candidate.ne, &mut candidates);
-                        QT::return_rc(candidate.nw, &mut candidates);
-                        QT::return_rc(candidate.se, &mut candidates);
-                        QT::return_rc(candidate.sw, &mut candidates);
+                        QT::return_rc(&candidate.ne, &mut candidates);
+                        QT::return_rc(&candidate.nw, &mut candidates);
+                        QT::return_rc(&candidate.se, &mut candidates);
+                        QT::return_rc(&candidate.sw, &mut candidates);
                     }
                 }
                 // slowly deplete the list of candidates while we add
@@ -199,7 +221,7 @@ impl QT {
             self.points.push(o.clone());
         }
     }
-    fn return_rc(el: El<QT>, v: &mut Vec<Rc<RefCell<Box<QT>>>>) {
+    fn return_rc(el:&El<QT>, v: &mut Vec<Rc<RefCell<Box<QT>>>>) {
         match el {
             El::Some(contents) => {
                 v.push(Rc::clone(&contents));
@@ -213,19 +235,26 @@ impl QT {
 // still needs initial setup and random point creation as we loop
 fn main() {
     println!("Hello, world!");
-    let head = El::new_part(QT::new());
-    // make a copy of head via rc clone,
-    let mut walker = Rc::clone(&head);
-    // then loop and add to it
-    for i in 0..20 {
-        // make a new Element then add it
-        let tree_part = QT::new(i as f32);
-        let new_ele = El::new_part(tree_part);
-        let next_walker = Rc::clone(&new_ele);
-        // replace the none at the end of walker
-        walker.borrow_mut().ne = El::Some(new_ele);
-        // make walker = new_ele
-        walker = next_walker;
+    let mut thread = rand::thread_rng();
+    let mut data = vec![];
+    for i in 0..8000 {
+        data.push(PT::new(thread.gen::<f32>(),thread.gen::<f32>()));
+    }
+    //thread.fill_data(&mut rand_data);
+    let mut x_ext = Extent::new();
+    let mut z_ext = Extent::new();
+    for pt in data.iter() {
+        x_ext.comp(pt.x);
+        z_ext.comp(pt.y);
+    }
+    // center should be the mid point which is (max - min)/2 + min
+    let w = (x_ext.max - x_ext.min);
+    let h = (z_ext.max - z_ext.min);
+    let c = PT::new((x_ext.max - x_ext.min)/2.0 + x_ext.min,(z_ext.max - z_ext.min)/2.0 + z_ext.min);
+    let head = El::new_part(QT::new(c,w,h,w/8.0,4));
+    for pt in data {
+        let mut head = head.borrow_mut();
+        head.addPoint(pt.clone());
     }
     println!("result {:?}", head);
 }
