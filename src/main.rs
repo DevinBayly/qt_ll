@@ -59,9 +59,9 @@ struct BB {
     h: f32,
     c: PT,
     t: f32,
+    r: f32,
     b: f32,
     l: f32,
-    r: f32,
 }
 
 impl BB {
@@ -138,10 +138,12 @@ impl QT {
             //println!("looping leafs {:?}",leafs);
                 ////println!("candidate len is {:?}",candidates.len());
                 let mut candidate = candidate_rc.borrow_mut();
+                println!("candidate is {:?}",candidate);
                 if candidate.bb.contains(&o) {
                     if !candidate.subdiv {
                         // if capacity isn't full and haven't subdivided
                         if candidate.points.len() < candidate.capacity {
+                        println!("candidate  {:#?}contains {:?}",candidate,o);
                             candidate.points.push(o.clone());
                             // we should keep this leaf in our listing
                             new_leafs.push(candidate_rc.clone());
@@ -150,12 +152,14 @@ impl QT {
                             // this is the complex spot, call on the subdivide for our candidate and spread the existing points between the children
                             // this is the end of this path too
                             // temporarily go above cap so that we can loop over the cap +1 points when redistributing
+                            println!("candidate  {:#?} needs to subdivide {:?}",candidate,o);
                             candidate.points.push(o.clone());
                             candidate.subdivide(&mut new_leafs);
                         }
                         // else if we are at cap and haven't subdivided
                     }
                 } else {
+                    println!("candidate  {:#?}doesn't contain {:?}",candidate,o);
                     new_leafs.push(candidate_rc.clone());
                 }
                 // slowly deplete the list of candidates while we add
@@ -218,11 +222,12 @@ impl QT {
         leafs_vec.push(rc_wrap_se.clone());
         leafs_vec.push(rc_wrap_nw.clone());
         leafs_vec.push(rc_wrap_sw.clone());
+        println!("in subdivide leafs_vec is {:#?}",leafs_vec);
         //println!("leaf vec in subdivide {:?}",leafs_vec);
         self.ne = El::Some(rc_wrap_ne.clone());
-        self.se = El::Some(rc_wrap_ne.clone());
-        self.nw = El::Some(rc_wrap_ne.clone());
-        self.sw = El::Some(rc_wrap_ne.clone());
+        self.se = El::Some(rc_wrap_se.clone());
+        self.nw = El::Some(rc_wrap_nw.clone());
+        self.sw = El::Some(rc_wrap_sw.clone());
     }
     fn directAdd(&mut self, o: PT) {
         if self.bb.contains(&o) {
@@ -242,35 +247,45 @@ impl QT {
 // test out whether this works !!!!
 // still needs initial setup and random point creation as we loop
 fn main() {
-    ////println!("Hello, world!");
-    let max_number = args().nth(1).unwrap().parse::<usize>().unwrap();
-    let mut thread = rand::thread_rng();
-    let mut data = vec![];
-    for i in 0..max_number {
-        data.push(PT::new(thread.gen::<f32>(), thread.gen::<f32>()));
-    }
-    //thread.fill_data(&mut rand_data);
-    let mut x_ext = Extent::new();
-    let mut z_ext = Extent::new();
-    for pt in data.iter() {
-        x_ext.comp(pt.x);
-        z_ext.comp(pt.y);
-    }
-    // center should be the mid point which is (max - min)/2 + min
-    let w = x_ext.max - x_ext.min;
-    let h = z_ext.max - z_ext.min;
-    let c = PT::new(
-        (x_ext.max - x_ext.min) / 2.0 + x_ext.min,
-        (z_ext.max - z_ext.min) / 2.0 + z_ext.min,
-    );
-    let head = El::new_part(QT::new(c, w, h, 1.0, 4));
+    //////println!("Hello, world!");
+    //let max_number = args().nth(1).unwrap().parse::<usize>().unwrap();
+    //let mut thread = rand::thread_rng();
+    //let mut data = vec![];
+    //for i in 0..max_number {
+    //    data.push(PT::new(thread.gen::<f32>(), thread.gen::<f32>()));
+    //}
+    ////thread.fill_data(&mut rand_data);
+    //let mut x_ext = Extent::new();
+    //let mut z_ext = Extent::new();
+    //for pt in data.iter() {
+    //    x_ext.comp(pt.x);
+    //    z_ext.comp(pt.y);
+    //}
+    //// center should be the mid point which is (max - min)/2 + min
+    //let w = x_ext.max - x_ext.min;
+    //let h = z_ext.max - z_ext.min;
+    //let c = PT::new(
+    //    (x_ext.max - x_ext.min) / 2.0 + x_ext.min,
+    //    (z_ext.max - z_ext.min) / 2.0 + z_ext.min,
+    //);
+    let head = El::new_part(QT::new(PT::new(0.0,0.0), 8.0, 8.0, 0.0, 4));
     let head_ref = Rc::clone(&head);
     let mut leafs = vec![];
+    // in between 2 and 4
+    let data = [
+        PT::new(2.5,3.3),
+        PT::new(2.5,3.3),
+        PT::new(3.1,3.3),
+        PT::new(3.2,3.3),
+        PT::new(3.0,3.5),
+        PT::new(3.0,3.5),
+    ];
     for (i, pt) in data.iter().enumerate() {
         println!("point processed {:?} {:?}", pt, i);
         head_ref.borrow_mut().add_point(pt.clone(), &mut leafs);
+        println!("head is {:#?}", head_ref);
     }
-    println!("head")
+    println!("head {:#?}",head);
     // iterate over the head and output data to draw the tree
 
 
